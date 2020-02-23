@@ -573,6 +573,96 @@ inline bool Writer<StringBuffer>::WriteDouble(double d) {
 #if defined(RAPIDJSON_SSE2) || defined(RAPIDJSON_SSE42)
 template<>
 inline bool Writer<StringBuffer>::ScanWriteUnescapedString(StringStream& is, size_t length) {
+    if (length < 64)
+        return RAPIDJSON_LIKELY(is.Tell() < length);
+
+    if (!RAPIDJSON_LIKELY(is.Tell() < length))
+        return false;
+    const char* p = is.src_;
+    const char* end = is.head_ + length;
+    const char* nextAligned = reinterpret_cast<const char*>((reinterpret_cast<size_t>(p) + 63) & static_cast<size_t>(~63));
+    const char* endAligned = reinterpret_cast<const char*>(reinterpret_cast<size_t>(end) & static_cast<size_t>(~63));
+    if (nextAligned > end)
+        return true;
+
+
+    while (p != nextAligned)
+        if (*p < 0x20 || *p == '\"' || *p == '\\') {
+            is.src_ = p;
+            return RAPIDJSON_LIKELY(is.Tell() < length);
+        }
+        else
+            os_->PutUnsafe(*p++);
+
+    // The rest of string using SIMD
+    static const char dquote[64] = {
+        '\"', '\"', '\"', '\"', '\"', '\"', '\"', '\"',
+        '\"', '\"', '\"', '\"', '\"', '\"', '\"', '\"',
+        '\"', '\"', '\"', '\"', '\"', '\"', '\"', '\"',
+        '\"', '\"', '\"', '\"', '\"', '\"', '\"', '\"',
+        '\"', '\"', '\"', '\"', '\"', '\"', '\"', '\"',
+        '\"', '\"', '\"', '\"', '\"', '\"', '\"', '\"',
+        '\"', '\"', '\"', '\"', '\"', '\"', '\"', '\"',
+        '\"', '\"', '\"', '\"', '\"', '\"', '\"', '\"' };
+    static const char bslash[64] = {
+        '\\', '\\', '\\', '\\', '\\', '\\', '\\', '\\',
+        '\\', '\\', '\\', '\\', '\\', '\\', '\\', '\\',
+        '\\', '\\', '\\', '\\', '\\', '\\', '\\', '\\',
+        '\\', '\\', '\\', '\\', '\\', '\\', '\\', '\\',
+        '\\', '\\', '\\', '\\', '\\', '\\', '\\', '\\',
+        '\\', '\\', '\\', '\\', '\\', '\\', '\\', '\\',
+        '\\', '\\', '\\', '\\', '\\', '\\', '\\', '\\',
+        '\\', '\\', '\\', '\\', '\\', '\\', '\\', '\\' };
+    static const char space[64] = {
+        0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F,
+        0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F,
+        0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F,
+        0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F,
+        0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F,
+        0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F,
+        0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F,
+        0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F };
+    const __m512i dq = _mm512_loadu_si512(reinterpret_cast<const __m512i *>(&dquote[0]));
+    const __m512i bs = _mm512_loadu_si512(reinterpret_cast<const __m512i *>(&bslash[0]));
+    const __m512i sp = _mm512_loadu_si512(reinterpret_cast<const __m512i *>(&space[0]));
+
+    for (; p != endAligned; p += 64) {
+        const __m512i s = _mm512_loadu_si512(reinterpret_cast<const __m512i *>(p));
+        const uint64_t t1 = _mm512_cmpeq_epi8_mask(s, dq);
+        const uint64_t t2 = _mm512_cmpeq_epi8_mask(s, bs);
+        const uint64_t t3 = _mm512_cmpeq_epi8_mask(_mm512_max_epu8(s, sp), sp); // s < 0x20 <=> max(s, 0x1F) == 0x1F
+
+        uint64_t r = static_cast<uint64_t>(t1 | t2 | t3);
+        
+        if (RAPIDJSON_UNLIKELY(r != 0)) {   // some of characters is escaped
+            SizeType len;
+#ifdef _MSC_VER         // Find the index of first escaped
+            unsigned long offset;
+            _BitScanForward(&offset, r);
+            len = offset;
+#else
+            //len = static_cast<SizeType>(__builtin_ffs(r) - 1);
+            len = static_cast<SizeType>(_tzcnt_u64(r));;
+#endif
+            char* q = reinterpret_cast<char*>(os_->PushUnsafe(len));
+            for (size_t i = 0; i < len; i++)
+                q[i] = p[i];
+
+            p += len;
+            break;
+        }
+//        _mm_storeu_si128(reinterpret_cast<__m128i *>(os_->PushUnsafe(16)), s);
+        _mm512_storeu_si512(reinterpret_cast<__m512i *>(os_->PushUnsafe(64)), s);
+
+    }
+
+    is.src_ = p;
+    return RAPIDJSON_LIKELY(is.Tell() < length);
+}
+
+#if 0
+template<>
+inline bool Writer<StringBuffer>::ScanWriteUnescapedString(StringStream& is, size_t length) {
     if (length < 16)
         return RAPIDJSON_LIKELY(is.Tell() < length);
 
@@ -631,6 +721,8 @@ inline bool Writer<StringBuffer>::ScanWriteUnescapedString(StringStream& is, siz
     is.src_ = p;
     return RAPIDJSON_LIKELY(is.Tell() < length);
 }
+#endif
+
 #elif defined(RAPIDJSON_NEON)
 template<>
 inline bool Writer<StringBuffer>::ScanWriteUnescapedString(StringStream& is, size_t length) {

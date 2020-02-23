@@ -413,6 +413,7 @@ RAPIDJSON_NAMESPACE_BEGIN
     \ref RAPIDJSON_NO_SIZETYPEDEFINE.
 */
 typedef unsigned SizeType;
+//typedef uint64_t SizeType;
 RAPIDJSON_NAMESPACE_END
 #endif
 
