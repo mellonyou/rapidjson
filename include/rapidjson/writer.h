@@ -585,7 +585,6 @@ inline bool Writer<StringBuffer>::ScanWriteUnescapedString(StringStream& is, siz
     if (nextAligned > end)
         return true;
 
-
     while (p != nextAligned)
         if (*p < 0x20 || *p == '\"' || *p == '\\') {
             is.src_ = p;
