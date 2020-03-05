@@ -30,16 +30,16 @@
 #include <intrin.h>
 #pragma intrinsic(_BitScanForward)
 #endif
-#ifdef RAPIDJSON_SSE42
+
+#ifdef RAPIDJSON_AVX512
+#include <immintrin.h>
+#elif defined(RAPIDJSON_SSE42)
 #include <nmmintrin.h>
 #elif defined(RAPIDJSON_SSE2)
 #include <emmintrin.h>
 #elif defined(RAPIDJSON_NEON)
 #include <arm_neon.h>
 #endif
-
-#include <immintrin.h>
-#include <iostream>
 
 #ifdef __clang__
 RAPIDJSON_DIAG_PUSH
@@ -281,12 +281,7 @@ inline const char* SkipWhitespace(const char* p, const char* end) {
     return p;
 }
 
-#ifdef RAPIDJSON_SSE42
-
-#if 1
-// avx512
-
-
+#ifdef RAPIDJSON_AVX512
 
 //! Skip whitespace with avx512 instruction, testing 64 8-byte characters at once.
 inline const char *SkipWhitespace_SIMD(const char* p) {
@@ -297,13 +292,14 @@ inline const char *SkipWhitespace_SIMD(const char* p) {
         return p;
 /*
     // 16-byte align to the next boundary
-    const char* nextAligned = reinterpret_cast<const char*>((reinterpret_cast<size_t>(p) + 31) & static_cast<size_t>(~31));
+    const char* nextAligned = reinterpret_cast<const char*>((reinterpret_cast<size_t>(p) + 63) & static_cast<size_t>(~63));
     while (p != nextAligned)
         if (*p == ' ' || *p == '\n' || *p == '\r' || *p == '\t')
             ++p;
         else
             return p;
 */
+
     // ----------
     for (;; p += 64) {
         __m512i x = _mm512_loadu_si512(reinterpret_cast<const __m256i *>(p));
@@ -344,8 +340,7 @@ inline const char *SkipWhitespace_SIMD(const char* p, const char* end) {
     return SkipWhitespace(p, end);
 }
 
-
-#else
+#if 0
 //! Skip whitespace with SSE 4.2 pcmpistrm instruction, testing 16 8-byte characters at once.
 inline const char *SkipWhitespace_SIMD(const char* p) {
     int32_t      ms;
@@ -416,14 +411,10 @@ inline const char *SkipWhitespace_SIMD(const char* p, const char* end) {
 
     return SkipWhitespace(p, end);
 }
-
 #endif
 
 
-
-
-
-#if 0
+#elif defined(RAPIDJSON_SSE42)
 //! Skip whitespace with SSE 4.2 pcmpistrm instruction, testing 16 8-byte characters at once.
 inline const char *SkipWhitespace_SIMD(const char* p) {
     // Fast return for single non-whitespace
@@ -472,7 +463,6 @@ inline const char *SkipWhitespace_SIMD(const char* p, const char* end) {
 
     return SkipWhitespace(p, end);
 }
-#endif
 
 #elif defined(RAPIDJSON_SSE2)
 
@@ -1218,9 +1208,8 @@ private:
             // Do nothing for generic version
     }
 
-#if defined(RAPIDJSON_SSE2) || defined(RAPIDJSON_SSE42)
+#if defined(RAPIDJSON_AVX512)
 
-#if 1
 // StringStream -> StackStream<char>
     static RAPIDJSON_FORCEINLINE void ScanCopyUnescapedString(StringStream& is, StackStream<char>& os) {
         const char* p = is.src_;
@@ -1464,12 +1453,11 @@ private:
         is.src_ = is.dst_ = p;
     }
 
-#endif
 
 
 
+#elif defined(RAPIDJSON_SSE2) || defined(RAPIDJSON_SSE42)
 
-#if 0
     // StringStream -> StackStream<char>
     static RAPIDJSON_FORCEINLINE void ScanCopyUnescapedString(StringStream& is, StackStream<char>& os) {
         const char* p = is.src_;
@@ -1626,8 +1614,6 @@ private:
 
         is.src_ = is.dst_ = p;
     }
-
-#endif
 
 #elif defined(RAPIDJSON_NEON)
     // StringStream -> StackStream<char>

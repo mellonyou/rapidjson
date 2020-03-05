@@ -29,7 +29,10 @@
 #include <intrin.h>
 #pragma intrinsic(_BitScanForward)
 #endif
-#ifdef RAPIDJSON_SSE42
+
+#ifdef RAPIDJSON_AVX512
+#include <immintrin.h>
+#elif defined(RAPIDJSON_SSE42)
 #include <nmmintrin.h>
 #elif defined(RAPIDJSON_SSE2)
 #include <emmintrin.h>
@@ -570,7 +573,7 @@ inline bool Writer<StringBuffer>::WriteDouble(double d) {
     return true;
 }
 
-#if defined(RAPIDJSON_SSE2) || defined(RAPIDJSON_SSE42)
+#if defined(RAPIDJSON_AVX512)
 template<>
 inline bool Writer<StringBuffer>::ScanWriteUnescapedString(StringStream& is, size_t length) {
     if (length < 64)
@@ -659,7 +662,8 @@ inline bool Writer<StringBuffer>::ScanWriteUnescapedString(StringStream& is, siz
     return RAPIDJSON_LIKELY(is.Tell() < length);
 }
 
-#if 0
+#elif defined(RAPIDJSON_SSE2) || defined(RAPIDJSON_SSE42)
+#if 1
 template<>
 inline bool Writer<StringBuffer>::ScanWriteUnescapedString(StringStream& is, size_t length) {
     if (length < 16)
