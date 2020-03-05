@@ -379,7 +379,7 @@
     If any of these symbols is defined, RapidJSON defines the macro
     \c RAPIDJSON_SIMD to indicate the availability of the optimized code.
 */
-#if defined(RAPIDJSON_SSE2) || defined(RAPIDJSON_SSE42) \
+#if defined(RAPIDJSON_AVX512) || defined(RAPIDJSON_SSE2) || defined(RAPIDJSON_SSE42) \
     || defined(RAPIDJSON_NEON) || defined(RAPIDJSON_DOXYGEN_RUNNING)
 #define RAPIDJSON_SIMD
 #endif

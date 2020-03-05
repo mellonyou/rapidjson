@@ -17,7 +17,9 @@
 
 // __SSE2__ and __SSE4_2__ are recognized by gcc, clang, and the Intel compiler.
 // We use -march=native with gmake to enable -msse2 and -msse4.2, if supported.
-#if defined(__SSE4_2__)
+#if defined(__AVX512F__) && defined(__AVX512BW__)
+#  define RAPIDJSON_AVX512
+#elif defined(__SSE4_2__)
 #  define RAPIDJSON_SSE42
 #elif defined(__SSE2__)
 #  define RAPIDJSON_SSE2
@@ -39,7 +41,9 @@ RAPIDJSON_DIAG_OFF(effc++)
 
 using namespace rapidjson_simd;
 
-#ifdef RAPIDJSON_SSE2
+#ifdef RAPIDJSON_AVX512
+#define SIMD_SUFFIX(name) name##_AVX512
+#elif defined(RAPIDJSON_SSE2)
 #define SIMD_SUFFIX(name) name##_SSE2
 #elif defined(RAPIDJSON_SSE42)
 #define SIMD_SUFFIX(name) name##_SSE42

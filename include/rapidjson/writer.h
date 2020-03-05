@@ -29,7 +29,10 @@
 #include <intrin.h>
 #pragma intrinsic(_BitScanForward)
 #endif
-#ifdef RAPIDJSON_SSE42
+
+#ifdef RAPIDJSON_AVX512
+#include <immintrin.h>
+#elif defined(RAPIDJSON_SSE42)
 #include <nmmintrin.h>
 #elif defined(RAPIDJSON_SSE2)
 #include <emmintrin.h>
@@ -570,7 +573,7 @@ inline bool Writer<StringBuffer>::WriteDouble(double d) {
     return true;
 }
 
-#if defined(RAPIDJSON_SSE2) || defined(RAPIDJSON_SSE42)
+#if defined(RAPIDJSON_AVX512)
 template<>
 inline bool Writer<StringBuffer>::ScanWriteUnescapedString(StringStream& is, size_t length) {
     if (length < 64)
@@ -580,6 +583,7 @@ inline bool Writer<StringBuffer>::ScanWriteUnescapedString(StringStream& is, siz
         return false;
     const char* p = is.src_;
     const char* end = is.head_ + length;
+#if 1
     const char* nextAligned = reinterpret_cast<const char*>((reinterpret_cast<size_t>(p) + 63) & static_cast<size_t>(~63));
     const char* endAligned = reinterpret_cast<const char*>(reinterpret_cast<size_t>(end) & static_cast<size_t>(~63));
     if (nextAligned > end)
@@ -592,38 +596,11 @@ inline bool Writer<StringBuffer>::ScanWriteUnescapedString(StringStream& is, siz
         }
         else
             os_->PutUnsafe(*p++);
+#endif
 
-    // The rest of string using SIMD
-    static const char dquote[64] = {
-        '\"', '\"', '\"', '\"', '\"', '\"', '\"', '\"',
-        '\"', '\"', '\"', '\"', '\"', '\"', '\"', '\"',
-        '\"', '\"', '\"', '\"', '\"', '\"', '\"', '\"',
-        '\"', '\"', '\"', '\"', '\"', '\"', '\"', '\"',
-        '\"', '\"', '\"', '\"', '\"', '\"', '\"', '\"',
-        '\"', '\"', '\"', '\"', '\"', '\"', '\"', '\"',
-        '\"', '\"', '\"', '\"', '\"', '\"', '\"', '\"',
-        '\"', '\"', '\"', '\"', '\"', '\"', '\"', '\"' };
-    static const char bslash[64] = {
-        '\\', '\\', '\\', '\\', '\\', '\\', '\\', '\\',
-        '\\', '\\', '\\', '\\', '\\', '\\', '\\', '\\',
-        '\\', '\\', '\\', '\\', '\\', '\\', '\\', '\\',
-        '\\', '\\', '\\', '\\', '\\', '\\', '\\', '\\',
-        '\\', '\\', '\\', '\\', '\\', '\\', '\\', '\\',
-        '\\', '\\', '\\', '\\', '\\', '\\', '\\', '\\',
-        '\\', '\\', '\\', '\\', '\\', '\\', '\\', '\\',
-        '\\', '\\', '\\', '\\', '\\', '\\', '\\', '\\' };
-    static const char space[64] = {
-        0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F,
-        0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F,
-        0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F,
-        0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F,
-        0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F,
-        0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F,
-        0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F,
-        0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F };
-    const __m512i dq = _mm512_loadu_si512(reinterpret_cast<const __m512i *>(&dquote[0]));
-    const __m512i bs = _mm512_loadu_si512(reinterpret_cast<const __m512i *>(&bslash[0]));
-    const __m512i sp = _mm512_loadu_si512(reinterpret_cast<const __m512i *>(&space[0]));
+    const __m512i dq = _mm512_set1_epi8('\"');
+    const __m512i bs = _mm512_set1_epi8('\\');
+    const __m512i sp = _mm512_set1_epi8(0x1F);
 
     for (; p != endAligned; p += 64) {
         const __m512i s = _mm512_loadu_si512(reinterpret_cast<const __m512i *>(p));
@@ -659,7 +636,8 @@ inline bool Writer<StringBuffer>::ScanWriteUnescapedString(StringStream& is, siz
     return RAPIDJSON_LIKELY(is.Tell() < length);
 }
 
-#if 0
+#elif defined(RAPIDJSON_SSE2) || defined(RAPIDJSON_SSE42)
+#if 1
 template<>
 inline bool Writer<StringBuffer>::ScanWriteUnescapedString(StringStream& is, size_t length) {
     if (length < 16)

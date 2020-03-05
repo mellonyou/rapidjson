@@ -28,7 +28,9 @@
 #include <fstream>
 #include <vector>
 
-#ifdef RAPIDJSON_SSE2
+#ifdef RAPIDJSON_AVX512
+#define SIMD_SUFFIX(name) name##_AVX512
+#elif defined(RAPIDJSON_SSE2)
 #define SIMD_SUFFIX(name) name##_SSE2
 #elif defined(RAPIDJSON_SSE42)
 #define SIMD_SUFFIX(name) name##_SSE42
