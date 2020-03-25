@@ -1250,7 +1250,6 @@ private:
     }
 
 #elif defined(RAPIDJSON_SSE2) || defined(RAPIDJSON_SSE42)
-
     // StringStream -> StackStream<char>
     static RAPIDJSON_FORCEINLINE void ScanCopyUnescapedString(StringStream& is, StackStream<char>& os) {
         const char* p = is.src_;
